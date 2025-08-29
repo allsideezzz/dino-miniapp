@@ -205,27 +205,21 @@
       navigator.clipboard.writeText(link).then(()=>alert('Ссылка скопирована'));
     }
 
-   async function demoExchange(){
-    const p = prompt('Сколько очков обменять?');
-    const pts = Math.max(0, parseInt(p||'0',10)||0);
-    if (!pts) return;
-    try {
-      const prev = await api('/exchange/preview?points='+pts, { method:'GET' });
-      const coins = BigInt(prev.coins||'0');
-      const used  = BigInt(prev.pointsUsed||'0');
-      if (coins === 0n) { alert('Недостаточно очков для обмена на текущем курсе'); return; }
-  
-      if (!confirm(`Предпросмотр:\nОчки: ${used}\nМонет: ${coins}\nПродолжаем?`)) return;
-  
-      const idem = 'idem_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-      const res = await api('/exchange', { method:'POST', body: { points: pts, idempotencyKey: idem } });
-      alert(`Выпущено монет: ${res.coinsIssued}\nСписано очков: ${res.pointsSpent}`);
-  
-      await refreshProfile();
-    } catch (e) {
-      alert('Ошибка обмена');
-    }
+async function api(path, opts={}) {
+  const r = await fetch(API+path, {
+    method: opts.method || 'GET',
+    headers: {'Content-Type':'application/json', ...(token ? {Authorization:'Bearer '+token}: {})},
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  });
+  if (!r.ok) {
+    let msg = await r.text(); try { msg = JSON.parse(msg).error || msg } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
 }
+
+// в demoExchange:
+} catch (e) { alert('Ошибка обмена: '+(e.message||e)); }
 
     function demoWithdraw(){
       alert('Демо: подключение TonSpace добавим после бэкенда');
