@@ -205,13 +205,27 @@
       navigator.clipboard.writeText(link).then(()=>alert('Ссылка скопирована'));
     }
 
-    function demoExchange(){
-      const points = prompt('Сколько очков обменять? Курс 1000:1');
-      if (!points) return;
-      const p = Math.max(0, parseInt(points,10)||0);
-      const coins = Math.floor(p / 1000);
-      alert(`Демо-расчёт: ${p} очков → ${coins} монет`);
+   async function demoExchange(){
+    const p = prompt('Сколько очков обменять?');
+    const pts = Math.max(0, parseInt(p||'0',10)||0);
+    if (!pts) return;
+    try {
+      const prev = await api('/exchange/preview?points='+pts, { method:'GET' });
+      const coins = BigInt(prev.coins||'0');
+      const used  = BigInt(prev.pointsUsed||'0');
+      if (coins === 0n) { alert('Недостаточно очков для обмена на текущем курсе'); return; }
+  
+      if (!confirm(`Предпросмотр:\nОчки: ${used}\nМонет: ${coins}\nПродолжаем?`)) return;
+  
+      const idem = 'idem_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+      const res = await api('/exchange', { method:'POST', body: { points: pts, idempotencyKey: idem } });
+      alert(`Выпущено монет: ${res.coinsIssued}\nСписано очков: ${res.pointsSpent}`);
+  
+      await refreshProfile();
+    } catch (e) {
+      alert('Ошибка обмена');
     }
+}
 
     function demoWithdraw(){
       alert('Демо: подключение TonSpace добавим после бэкенда');
