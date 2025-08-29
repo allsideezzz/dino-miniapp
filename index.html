@@ -6,39 +6,98 @@
   <title>Dino Mini App</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    body { margin:0; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; }
-    h1 { margin-bottom:20px; }
-    #points { font-size:24px; margin:10px; }
-    button { padding:10px 20px; font-size:18px; margin:5px; }
+    body { margin:0; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; gap:10px }
+    h1 { margin:0 0 10px }
+    .row { display:flex; gap:8px; flex-wrap:wrap; justify-content:center }
+    button { padding:10px 16px; font-size:16px }
+    .stat { font-size:18px }
   </style>
 </head>
 <body>
   <h1>Dino Mini App</h1>
-  <div id="points">Очки: 0</div>
-  <button onclick="startRun()">Старт забега</button>
-  <button onclick="addPoints()">+10 очков</button>
+
+  <div class="stat" id="total">Всего очков: 0</div>
+  <div class="stat" id="run">Очки за забег: 0</div>
+  <div class="stat" id="status">Статус: ожидание старта</div>
+
+  <div class="row">
+    <button onclick="startRun()">Старт забега</button>
+    <button onclick="togglePause()" id="pauseBtn" disabled>Пауза</button>
+    <button onclick="endRun()" id="endBtn" disabled>Завершить забег</button>
+  </div>
+
   <button onclick="window.Telegram.WebApp.close()">Закрыть</button>
 
   <script>
-    Telegram.WebApp.ready();
-    Telegram.WebApp.expand();
+    Telegram.WebApp.ready(); Telegram.WebApp.expand();
 
-    let totalPoints = 0;
-    let runActive = false;
+    // Константы
+    const MAX_PER_RUN = 30000;   // лимит по ТЗ
+    const TICK_POINTS = 5;       // очков за тик
+    const TICK_MS = 300;         // раз в 300 мс
+
+    // Состояние
+    let totalPoints = 0;   // сумма за все забеги
+    let runPoints = 0;     // очки текущего забега
+    let running = false;
+    let paused = false;
+    let timer = null;
+
+    // UI
+    const totalEl = document.getElementById('total');
+    const runEl   = document.getElementById('run');
+    const statusEl= document.getElementById('status');
+    const pauseBtn= document.getElementById('pauseBtn');
+    const endBtn  = document.getElementById('endBtn');
+
+    function updateUI() {
+      totalEl.textContent = "Всего очков: " + totalPoints;
+      runEl.textContent = "Очки за забег: " + runPoints;
+      statusEl.textContent = "Статус: " + (running ? (paused ? "пауза" : "бег") : "ожидание старта");
+      pauseBtn.textContent = paused ? "Продолжить" : "Пауза";
+      pauseBtn.disabled = !running;
+      endBtn.disabled = !running;
+    }
 
     function startRun() {
-      runActive = true;
-      alert("Забег начался!");
+      if (running) return;
+      running = true;
+      paused = false;
+      runPoints = 0;
+      timer = setInterval(tick, TICK_MS);
+      updateUI();
     }
 
-    function addPoints() {
-      if (!runActive) {
-        alert("Сначала нажми Старт забега");
+    function tick() {
+      if (!running || paused) return;
+      if (runPoints >= MAX_PER_RUN) {
+        endRun(); // автозавершение по лимиту
         return;
       }
-      totalPoints += 10;
-      document.getElementById("points").textContent = "Очки: " + totalPoints;
+      const canAdd = Math.min(TICK_POINTS, MAX_PER_RUN - runPoints);
+      runPoints += canAdd;
+      updateUI();
     }
+
+    function togglePause() {
+      if (!running) return;
+      paused = !paused;
+      updateUI();
+    }
+
+    function endRun() {
+      if (!running) return;
+      clearInterval(timer); timer = null;
+      running = false;
+
+      // Фиксируем очки забега к общим
+      totalPoints += runPoints;
+      updateUI();
+
+      alert("Забег завершён. Получено очков: " + runPoints);
+    }
+
+    updateUI();
   </script>
 </body>
 </html>
