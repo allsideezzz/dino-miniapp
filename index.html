@@ -1,235 +1,103 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dino Mini App</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    :root { --bg:#0f1115; --fg:#e6e6e6; --muted:#98a2b3; --btn:#1f2937; --btn2:#111827; }
-    body { margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--fg); background:var(--bg);
-           display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; gap:10px }
-    h1 { margin:0 0 10px }
-    .row { display:flex; gap:8px; flex-wrap:wrap; justify-content:center }
-    button { padding:10px 16px; font-size:16px; border:1px solid #222; border-radius:10px; background:var(--btn); color:var(--fg); cursor:pointer }
-    button.secondary { background:var(--btn2) }
-    .stat { font-size:18px }
-    .topbar { position:fixed; top:10px; left:10px; right:10px; display:flex; align-items:center; justify-content:space-between }
-    .pill { padding:6px 10px; border-radius:999px; border:1px solid #222; background:var(--btn2); font-size:14px; color:var(--muted) }
-    /* Меню */
-    .overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
-    .sheet { width:min(420px,92vw); background:#0b0d12; border:1px solid #23262d; border-radius:14px; padding:14px; }
-    .sheet h3 { margin:0 0 8px }
-    .item { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-top:1px solid #1b1e25; }
-    .item:first-of-type { border-top:none }
-    .hint { color:var(--muted); font-size:13px }
-    details { border-top:1px solid #1b1e25; padding:8px 0 }
-    summary { cursor:pointer; list-style:none }
-    summary::-webkit-details-marker { display:none }
-    .list { margin-top:8px; font-size:14px; color:var(--muted) }
-    a { color:#8ab4ff; text-decoration:none }
-  </style>
-</head>
-<body>
-  <div class="topbar">
-    <div class="pill" id="tot">Всего очков: 0</div>
-    <div style="display:flex; gap:8px; align-items:center">
-      <button class="secondary" id="soundBtn" title="Звук">Звук: выкл</button>
-      <button class="secondary" id="menuBtn" title="Меню">…</button>
-    </div>
-  </div>
+<script>
+  Telegram.WebApp.ready(); Telegram.WebApp.expand();
 
-  <h1>Dino Mini App</h1>
-  <div class="stat" id="run">Очки за забег: 0</div>
-  <div class="stat" id="status">Статус: ожидание старта</div>
+  // === API ===
+  const API = 'http://localhost:8080';
+  let token = null;
 
-  <div class="row">
-    <button onclick="startRun()">Старт забега</button>
-    <button onclick="togglePause()" id="pauseBtn" disabled>Пауза</button>
-    <button onclick="endRun()" id="endBtn" disabled>Завершить забег</button>
-    <button onclick="window.Telegram.WebApp.close()" class="secondary">Закрыть</button>
-  </div>
-
-  <!-- Меню -->
-  <div class="overlay" id="overlay" onclick="closeMenu(event)">
-    <div class="sheet" onclick="event.stopPropagation()">
-      <h3>Меню</h3>
-      <div class="item">
-        <div>
-          <div>Реферальная ссылка</div>
-          <div class="hint" id="refLinkHint">t.me/…?start=CODE</div>
-        </div>
-        <button onclick="copyRef()">Копировать</button>
-      </div>
-
-      <details>
-        <summary>Мои рефералы (до 10)</summary>
-        <div class="list" id="refList">Пока пусто</div>
-      </details>
-
-      <div class="item">
-        <div>
-          <div>Обмен очков → монетки</div>
-          <div class="hint">Демо: курс 1000:1. Лимит 100 монет/день.</div>
-        </div>
-        <button onclick="demoExchange()">Обменять</button>
-      </div>
-
-      <details>
-        <summary>Скины</summary>
-        <div class="list" id="skinsList">Скоро: выбор цвета динозавра/карты/кактусов.</div>
-      </details>
-
-      <div class="item">
-        <div>
-          <div>Вывести монеты</div>
-          <div class="hint">Демо: TonSpace подключение позже.</div>
-        </div>
-        <button onclick="demoWithdraw()">Вывести</button>
-      </div>
-
-      <details>
-        <summary>Соцсети</summary>
-        <div class="list">
-          <a href="#" target="_blank">Telegram</a> ·
-          <a href="#" target="_blank">Twitter</a> ·
-          <a href="#" target="_blank">Сайт</a>
-        </div>
-      </details>
-
-      <div class="item">
-        <div class="hint">Закрыть меню</div>
-        <button onclick="hideMenu()">Закрыть</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    Telegram.WebApp.ready(); Telegram.WebApp.expand();
-
-    // Константы
-    const MAX_PER_RUN = 30000;
-    const TICK_POINTS = 5;
-    const TICK_MS = 300;
-
-    // Состояние
-    let totalPoints = 0;
-    let runPoints = 0;
-    let running = false;
-    let paused = false;
-    let timer = null;
-
-    // Звук
-    let audioOn = false;
-    let ac = null;
-
-    // UI элементы
-    const totalEl  = document.getElementById('tot');
-    const runEl    = document.getElementById('run');
-    const statusEl = document.getElementById('status');
-    const pauseBtn = document.getElementById('pauseBtn');
-    const endBtn   = document.getElementById('endBtn');
-    const soundBtn = document.getElementById('soundBtn');
-    const overlay  = document.getElementById('overlay');
-
-    function updateUI() {
-      totalEl.textContent = "Всего очков: " + totalPoints;
-      runEl.textContent   = "Очки за забег: " + runPoints;
-      statusEl.textContent= "Статус: " + (running ? (paused ? "пауза" : "бег") : "ожидание старта");
-      pauseBtn.textContent= paused ? "Продолжить" : "Пауза";
-      pauseBtn.disabled   = !running;
-      endBtn.disabled     = !running;
-      soundBtn.textContent= "Звук: " + (audioOn ? "вкл" : "выкл");
-    }
-
-    function startRun() {
-      if (running) return;
-      running = true; paused = false; runPoints = 0;
-      timer = setInterval(tick, TICK_MS);
-      beep(300, 0.05); // старт
-      updateUI();
-    }
-
-    function tick() {
-      if (!running || paused) return;
-      if (runPoints >= MAX_PER_RUN) { endRun(); return; }
-      const canAdd = Math.min(TICK_POINTS, MAX_PER_RUN - runPoints);
-      runPoints += canAdd;
-      if (audioOn) beep(880, 0.01);
-      updateUI();
-    }
-
-    function togglePause() {
-      if (!running) return;
-      paused = !paused;
-      if (audioOn) beep(paused ? 420 : 660, 0.03);
-      updateUI();
-    }
-
-    function endRun() {
-      if (!running) return;
-      clearInterval(timer); timer = null; running = false;
-      totalPoints += runPoints;
-      if (audioOn) beep(520, 0.05);
-      updateUI();
-      alert("Забег завершён. Получено очков: " + runPoints);
-    }
-
-    function toggleSound() {
-      audioOn = !audioOn;
-      if (audioOn && !ac) ac = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioOn) beep(700, 0.03);
-      updateUI();
-    }
-
-    function beep(freq, dur) {
-      if (!audioOn) return;
-      try {
-        if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
-        const o = ac.createOscillator(); const g = ac.createGain();
-        o.connect(g); g.connect(ac.destination);
-        o.type = 'square'; o.frequency.value = freq;
-        g.gain.setValueAtTime(0.04, ac.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + dur);
-        o.start(); o.stop(ac.currentTime + dur);
-      } catch {}
-    }
-
-    // Меню
-    function showMenu(){ overlay.style.display='flex'; }
-    function hideMenu(){ overlay.style.display='none'; }
-    function closeMenu(e){ if(e.target===overlay) hideMenu(); }
-
-    function copyRef(){
-      const link = 'https://t.me/your_bot?start=DEMO_CODE'; // заглушка
-      navigator.clipboard.writeText(link).then(()=>alert('Ссылка скопирована'));
-    }
-
-async function api(path, opts={}) {
-  const r = await fetch(API+path, {
-    method: opts.method || 'GET',
-    headers: {'Content-Type':'application/json', ...(token ? {Authorization:'Bearer '+token}: {})},
-    body: opts.body ? JSON.stringify(opts.body) : undefined
-  });
-  if (!r.ok) {
-    let msg = await r.text(); try { msg = JSON.parse(msg).error || msg } catch {}
-    throw new Error(msg);
+  async function api(path, opts={}) {
+    const r = await fetch(API+path, {
+      method: opts.method || 'GET',
+      headers: {'Content-Type':'application/json', ...(token ? {Authorization:'Bearer '+token}: {})},
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+    if (!r.ok) { let msg = await r.text(); try { msg = JSON.parse(msg).error || msg } catch {}; throw new Error(msg); }
+    return r.json();
   }
-  return r.json();
-}
 
-// в demoExchange:
-} catch (e) { alert('Ошибка обмена: '+(e.message||e)); }
+  async function auth() {
+    const initData = Telegram.WebApp.initData || '';
+    const r = await api('/auth/telegram', { method:'POST', body:{ initData } });
+    token = r.token;
+    await refreshProfile();
+  }
 
-    function demoWithdraw(){
-      alert('Демо: подключение TonSpace добавим после бэкенда');
-    }
-
-    // Кнопки
-    document.getElementById('menuBtn').addEventListener('click', showMenu);
-    soundBtn.addEventListener('click', toggleSound);
-
+  async function refreshProfile() {
+    const me = await api('/me');
+    totalPoints = Number(me.total_points||0);
     updateUI();
-  </script>
-</body>
-</html>
+  }
+
+  // === Игра ===
+  const MAX_PER_RUN = 30000, TICK_POINTS = 5, TICK_MS = 300;
+  let totalPoints = 0, runPoints = 0, running = false, paused = false, timer = null, runId = null;
+  let audioOn = false, ac = null;
+
+  const totalEl=document.getElementById('tot'), runEl=document.getElementById('run'),
+        statusEl=document.getElementById('status'), pauseBtn=document.getElementById('pauseBtn'),
+        endBtn=document.getElementById('endBtn'), soundBtn=document.getElementById('soundBtn'),
+        overlay=document.getElementById('overlay');
+
+  function updateUI(){
+    totalEl.textContent="Всего очков: "+totalPoints;
+    runEl.textContent="Очки за забег: "+runPoints;
+    statusEl.textContent="Статус: "+(running?(paused?"пауза":"бег"):"ожидание старта");
+    pauseBtn.textContent=paused?"Продолжить":"Пауза";
+    pauseBtn.disabled=!running; endBtn.disabled=!running;
+    soundBtn.textContent="Звук: "+(audioOn?"вкл":"выкл");
+  }
+
+  async function startRun(){
+    if(running) return;
+    const r = await api('/runs/start', {method:'POST', body:{}});
+    runId = r.runId;
+    running=true; paused=false; runPoints=0; timer=setInterval(tick,TICK_MS);
+    beep(300,0.05); updateUI();
+  }
+
+  function tick(){
+    if(!running||paused) return;
+    if(runPoints>=MAX_PER_RUN){ endRun(); return; }
+    const add=Math.min(TICK_POINTS, MAX_PER_RUN-runPoints);
+    runPoints+=add; if(audioOn) beep(880,0.01); updateUI();
+  }
+
+  async function endRun(){
+    if(!running) return;
+    clearInterval(timer); timer=null; running=false;
+    const r = await api('/runs/end', {method:'POST', body:{ runId, points: runPoints }});
+    const accepted=Number(r.acceptedPoints||0);
+    totalPoints+=accepted; if(audioOn) beep(520,0.05); updateUI();
+    alert("Забег завершён. Зачтено очков: "+accepted);
+  }
+
+  function togglePause(){ if(!running) return; paused=!paused; if(audioOn) beep(paused?420:660,0.03); updateUI(); }
+  function toggleSound(){ audioOn=!audioOn; if(audioOn&&!ac) ac=new (window.AudioContext||window.webkitAudioContext)(); if(audioOn) beep(700,0.03); updateUI(); }
+  function beep(freq,dur){ if(!audioOn) return; try{ if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)(); const o=ac.createOscillator(), g=ac.createGain(); o.connect(g); g.connect(ac.destination); o.type='square'; o.frequency.value=freq; g.gain.setValueAtTime(0.04,ac.currentTime); g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+dur); o.start(); o.stop(ac.currentTime+dur);}catch{} }
+
+  // === Меню ===
+  function showMenu(){ overlay.style.display='flex'; }
+  function hideMenu(){ overlay.style.display='none'; }
+  function closeMenu(e){ if(e.target===overlay) hideMenu(); }
+  function copyRef(){ navigator.clipboard.writeText('https://t.me/your_bot?start=DEMO_CODE'); alert('Ссылка скопирована'); }
+
+  async function demoExchange(){
+    const p = prompt('Сколько очков обменять?'); const pts = Math.max(0, parseInt(p||'0',10)||0); if(!pts) return;
+    try{
+      const prev = await api('/exchange/preview?points='+pts);
+      const coins = BigInt(prev.coins||'0'); const used = BigInt(prev.pointsUsed||'0');
+      if(coins===0n){ alert('Недостаточно очков для обмена'); return; }
+      if(!confirm(`Предпросмотр:\nОчки: ${used}\nМонет: ${coins}\nПродолжаем?`)) return;
+      const idem='idem_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+      const res = await api('/exchange', {method:'POST', body:{ points: pts, idempotencyKey: idem }});
+      alert(`Выпущено монет: ${res.coinsIssued}\nСписано очков: ${res.pointsSpent}`);
+      await refreshProfile();
+    }catch(e){ alert('Ошибка обмена: '+(e.message||e)); }
+  }
+
+  document.getElementById('menuBtn').addEventListener('click', showMenu);
+  soundBtn.addEventListener('click', toggleSound);
+
+  updateUI();
+  auth(); // важный шаг: получаем token
+</script>
